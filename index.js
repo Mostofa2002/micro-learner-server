@@ -23,6 +23,8 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     const userCollection = client.db("learner").collection("users");
+    const requestCollection = client.db("learner").collection("teacherRequest");
+
     // jwt token create
     app.post("/jwt", async (req, res) => {
       const user = req.body;
@@ -32,7 +34,7 @@ async function run() {
 
     // middlewares
     const verifyToken = (req, res, next) => {
-      console.log("inside verify token", req.headers.authorization);
+      // console.log("inside verify token", req.headers.authorization);
       if (!req.headers.authorization) {
         return res.status(401).send({ message: "unauthorized access" });
       }
@@ -46,6 +48,17 @@ async function run() {
       });
     };
 
+    // use verify admin after verifyToken
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      const isAdmin = user?.role === "admin";
+      if (!isAdmin) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
     // user data load in database
     app.post("/users", async (req, res) => {
       const user = req.body;
@@ -58,9 +71,31 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/users", verifyToken, async (req, res) => {
+    // admin users list
+    app.get("/users", verifyToken, verifyAdmin, async (req, res) => {
       const result = await userCollection.find().toArray();
       res.send(result);
+    });
+
+    // admin teachers request
+    app.get("/requests", async (req, res) => {
+      const result = await requestCollection.find().toArray();
+      res.send(result);
+    });
+
+    // checking admin
+    app.get("/users/admin/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      let admin = false;
+      if (user) {
+        admin = user?.role === "admin";
+      }
+      res.send({ admin });
     });
 
     // make admin
@@ -73,6 +108,20 @@ async function run() {
         },
       };
       const result = await userCollection.updateOne(filter, updatedDoc);
+      res.send(result);
+    });
+
+    // individual user data
+    app.get("/profile", verifyToken, async (req, res) => {
+      const email = req.query.email;
+      const query = { email: email };
+      const result = await userCollection.findOne(query);
+      res.send(result);
+    });
+    // request for teacher
+    app.post("/request-teacher", verifyToken, async (req, res) => {
+      const request = req.body;
+      const result = await requestCollection.insertOne(request);
       res.send(result);
     });
 
