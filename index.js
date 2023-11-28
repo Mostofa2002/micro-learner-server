@@ -118,10 +118,92 @@ async function run() {
       const result = await userCollection.findOne(query);
       res.send(result);
     });
+
     // request for teacher
     app.post("/request-teacher", verifyToken, async (req, res) => {
       const request = req.body;
       const result = await requestCollection.insertOne(request);
+      const filter = { email: request.email };
+      const updatedDoc = {
+        $set: {
+          status: "pending",
+        },
+      };
+      const options = { upsert: true };
+      const updated = await userCollection.updateOne(
+        filter,
+        updatedDoc,
+        options
+      );
+      res.send(result);
+    });
+
+    // request for accept
+    app.patch("/accept/:id", async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const options = { upsert: true };
+      const updatedDoc = {
+        $set: {
+          status: "accepted",
+          role: "teacher",
+        },
+      };
+      const result = await requestCollection.updateOne(
+        filter,
+        updatedDoc,
+        options
+      );
+
+      const existingData = await requestCollection.findOne({
+        _id: new ObjectId(id),
+      });
+
+      const updated = await userCollection.updateOne(
+        {
+          email: existingData.email,
+        },
+
+        updatedDoc,
+        options
+      );
+      res.send(result);
+    });
+
+    // request for rejected
+    app.patch("/reject/:id", async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const options = { upsert: true };
+      const updatedDoc = {
+        $set: {
+          status: "rejected",
+        },
+      };
+      const result = await requestCollection.updateOne(
+        filter,
+        updatedDoc,
+        options
+      );
+      const existingData = await requestCollection.findOne({
+        _id: new ObjectId(id),
+      });
+
+      const updated = await userCollection.updateOne(
+        {
+          email: existingData.email,
+        },
+
+        updatedDoc,
+        options
+      );
+      res.send(result);
+    });
+
+    app.get("/users-new/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const result = await userCollection.findOne(query);
       res.send(result);
     });
 
