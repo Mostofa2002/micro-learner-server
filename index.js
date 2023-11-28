@@ -268,6 +268,31 @@ async function run() {
       res.send(result);
     });
 
+    // update data get
+    app.get("/update/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await allCollection.findOne(query);
+      res.send(result);
+    });
+    // updated data
+    app.put("/updated-class/:id", async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const options = { upsert: true };
+      const data = req.body;
+      const content = {
+        $set: {
+          image: data.photo,
+          title: data.title,
+          price: data.price,
+          description: data.description,
+        },
+      };
+      const result = await allCollection.updateOne(filter, content, options);
+      res.send(result);
+    });
+
     // admin get all classes
     app.get("/classes", verifyToken, verifyAdmin, async (req, res) => {
       const result = await allCollection.find().toArray();
