@@ -24,6 +24,7 @@ async function run() {
   try {
     const userCollection = client.db("learner").collection("users");
     const requestCollection = client.db("learner").collection("teacherRequest");
+    const allCollection = client.db("learner").collection("allClasses");
 
     // jwt token create
     app.post("/jwt", async (req, res) => {
@@ -59,6 +60,19 @@ async function run() {
       }
       next();
     };
+
+    // use verify admin after verifyToken
+    const verifyTeacher = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      const isAdmin = user?.role === "teacher";
+      if (!isAdmin) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    };
+
     // user data load in database
     app.post("/users", async (req, res) => {
       const user = req.body;
@@ -78,7 +92,7 @@ async function run() {
     });
 
     // admin teachers request
-    app.get("/requests", async (req, res) => {
+    app.get("/requests", verifyToken, verifyAdmin, async (req, res) => {
       const result = await requestCollection.find().toArray();
       res.send(result);
     });
@@ -97,19 +111,38 @@ async function run() {
       }
       res.send({ admin });
     });
+    // checking teacher
+    app.get("/user/teacher/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      let teacher = false;
+      if (user) {
+        teacher = user?.role === "teacher";
+      }
+      res.send({ teacher });
+    });
 
     // make admin
-    app.patch("/users/admin/:id", async (req, res) => {
-      const id = req.params.id;
-      const filter = { _id: new ObjectId(id) };
-      const updatedDoc = {
-        $set: {
-          role: "admin",
-        },
-      };
-      const result = await userCollection.updateOne(filter, updatedDoc);
-      res.send(result);
-    });
+    app.patch(
+      "/users/admin/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        const updatedDoc = {
+          $set: {
+            role: "admin",
+          },
+        };
+        const result = await userCollection.updateOne(filter, updatedDoc);
+        res.send(result);
+      }
+    );
 
     // individual user data
     app.get("/profile", verifyToken, async (req, res) => {
@@ -139,7 +172,7 @@ async function run() {
     });
 
     // request for accept
-    app.patch("/accept/:id", async (req, res) => {
+    app.patch("/accept/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) };
       const options = { upsert: true };
@@ -171,7 +204,7 @@ async function run() {
     });
 
     // request for rejected
-    app.patch("/reject/:id", async (req, res) => {
+    app.patch("/reject/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) };
       const options = { upsert: true };
@@ -206,6 +239,87 @@ async function run() {
       const result = await userCollection.findOne(query);
       res.send(result);
     });
+
+    // teachers api
+    app.post("/add-class", verifyToken, verifyTeacher, async (req, res) => {
+      const add = req.body;
+      const result = await allCollection.insertOne(add);
+      res.send(result);
+    });
+
+    // teachers my classes api
+    app.get(
+      "/updated-class/:email",
+      verifyToken,
+      verifyTeacher,
+      async (req, res) => {
+        const email = req.params.email;
+        const query = { email: email };
+        const result = await allCollection.find(query).toArray();
+        res.send(result);
+      }
+    );
+
+    // teacher can delete classes
+    app.delete("/class-delete/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await allCollection.deleteOne(query);
+      res.send(result);
+    });
+
+    // admin get all classes
+    app.get("/classes", verifyToken, verifyAdmin, async (req, res) => {
+      const result = await allCollection.find().toArray();
+      res.send(result);
+    });
+
+    // admin class patch
+    app.patch(
+      "/class-accept/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        const options = { upsert: true };
+        const updatedDoc = {
+          $set: {
+            status: "accepted",
+          },
+        };
+        const result = await allCollection.updateOne(
+          filter,
+          updatedDoc,
+          options
+        );
+
+        res.send(result);
+      }
+    );
+
+    app.patch(
+      "/class-reject/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        const options = { upsert: true };
+        const updatedDoc = {
+          $set: {
+            status: "rejected",
+          },
+        };
+        const result = await allCollection.updateOne(
+          filter,
+          updatedDoc,
+          options
+        );
+
+        res.send(result);
+      }
+    );
 
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
