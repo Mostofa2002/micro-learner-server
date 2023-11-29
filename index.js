@@ -2,6 +2,11 @@ const express = require("express");
 const cors = require("cors");
 const app = express();
 const port = process.env.PORT || 5000;
+
+const stripe = require("stripe")(
+  "sk_test_51OHVkoKz9GeGBed50qdbA9YnzIPGiLHsqx2VgcYsUxj6URGg6Vek933ngkeKXgb45nQVuyTBk5hFAc6pSLvmXzLu00YUiADBIy"
+);
+
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
 // middleware
@@ -25,6 +30,7 @@ async function run() {
     const userCollection = client.db("learner").collection("users");
     const requestCollection = client.db("learner").collection("teacherRequest");
     const allCollection = client.db("learner").collection("allClasses");
+    const paymentCollection = client.db("learner").collection("payment");
 
     // jwt token create
     app.post("/jwt", async (req, res) => {
@@ -66,8 +72,8 @@ async function run() {
       const email = req.decoded.email;
       const query = { email: email };
       const user = await userCollection.findOne(query);
-      const isAdmin = user?.role === "teacher";
-      if (!isAdmin) {
+      const isTeacher = user?.role === "teacher";
+      if (!isTeacher) {
         return res.status(403).send({ message: "forbidden access" });
       }
       next();
@@ -261,12 +267,16 @@ async function run() {
     );
 
     // teacher can delete classes
-    app.delete("/class-delete/:id", async (req, res) => {
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) };
-      const result = await allCollection.deleteOne(query);
-      res.send(result);
-    });
+    app.delete(
+      "/class-delete/:id",
+
+      async (req, res) => {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const result = await allCollection.deleteOne(query);
+        res.send(result);
+      }
+    );
 
     // update data get
     app.get("/update/:id", async (req, res) => {
@@ -345,6 +355,64 @@ async function run() {
         res.send(result);
       }
     );
+    // global all class
+    app.get("/users-class", async (req, res) => {
+      const result = await allCollection.find().toArray();
+      res.send(result);
+    });
+
+    app.get("/payment/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await allCollection.findOne(query);
+      res.send(result);
+    });
+
+    // payment intent
+
+    app.post("/payment-intent", async (req, res) => {
+      const data = req.body;
+      const price = data?.price;
+      console.log(price);
+      const amount = Number(price) * 100;
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        currency: "usd",
+        amount: amount,
+        payment_method_types: ["card"],
+      });
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
+    });
+
+    // payment history
+    app.post("/payment-history", async (req, res) => {
+      const pay = req.body;
+      const filter = { _id: new ObjectId(pay.id) };
+      const result = await paymentCollection.insertOne(pay);
+      const exsitingData = await allCollection.findOne(filter);
+      const options = { upsert: true };
+      const enrollUpdated = Number(exsitingData.enroll) + 1;
+      const updatedDoc = {
+        $set: {
+          enroll: enrollUpdated,
+        },
+      };
+      const updatedData = await allCollection.updateOne(
+        filter,
+        updatedDoc,
+        options
+      );
+      res.send(result);
+    });
+
+    app.get("/payment-history/user/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const result = await paymentCollection.find(query).toArray();
+      res.send(result);
+    });
 
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
