@@ -266,18 +266,6 @@ async function run() {
       }
     );
 
-    // teacher can delete classes
-    app.delete(
-      "/class-delete/:id",
-
-      async (req, res) => {
-        const id = req.params.id;
-        const query = { _id: new ObjectId(id) };
-        const result = await allCollection.deleteOne(query);
-        res.send(result);
-      }
-    );
-
     // update data get
     app.get("/update/:id", async (req, res) => {
       const id = req.params.id;
@@ -286,20 +274,28 @@ async function run() {
       res.send(result);
     });
     // updated data
-    app.put("/updated-class/:id", async (req, res) => {
+    app.put("/updated/:id", async (req, res) => {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) };
       const options = { upsert: true };
       const data = req.body;
       const content = {
         $set: {
-          image: data.photo,
+          image: data.image,
           title: data.title,
           price: data.price,
           description: data.description,
         },
       };
       const result = await allCollection.updateOne(filter, content, options);
+      res.send(result);
+    });
+
+    // teacher can delete classes
+    app.delete("/class-delete/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await allCollection.deleteOne(query);
       res.send(result);
     });
 
@@ -351,13 +347,22 @@ async function run() {
           updatedDoc,
           options
         );
-
         res.send(result);
       }
     );
     // global all class
     app.get("/users-class", async (req, res) => {
       const result = await allCollection.find().toArray();
+      res.send(result);
+    });
+    // highlighted class
+    app.get("/highlighted-class", async (req, res) => {
+      const query = {};
+      const options = { sort: { enroll: -1 } };
+      const result = await allCollection
+        .find(query, options)
+        .limit(3)
+        .toArray();
       res.send(result);
     });
 
@@ -407,11 +412,32 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/payment-history/user/:email", async (req, res) => {
+    app.get("/payment-history/user/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
       const query = { email: email };
       const result = await paymentCollection.find(query).toArray();
       res.send(result);
+    });
+
+    app.get("/state", async (req, res) => {
+      const user = await userCollection.estimatedDocumentCount();
+      const totalClass = await allCollection.estimatedDocumentCount();
+      const result = await allCollection
+        .aggregate([
+          {
+            $group: {
+              _id: null,
+              Enroll: {
+                $sum: "$enroll",
+              },
+            },
+          },
+        ])
+        .toArray();
+
+      const totalEnroll = result.length > 0 ? result[0].Enroll : 0;
+
+      res.send({ user, totalClass, totalEnroll });
     });
 
     // Connect the client to the server	(optional starting in v4.7)
