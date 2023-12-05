@@ -1,14 +1,11 @@
 const express = require("express");
 const cors = require("cors");
 const app = express();
-const port = process.env.PORT || 5000;
-
-const stripe = require("stripe")(
-  "sk_test_51OHVkoKz9GeGBed50qdbA9YnzIPGiLHsqx2VgcYsUxj6URGg6Vek933ngkeKXgb45nQVuyTBk5hFAc6pSLvmXzLu00YUiADBIy"
-);
-
-const jwt = require("jsonwebtoken");
 require("dotenv").config();
+const port = process.env.PORT || 5000;
+const stripe = require("stripe")(process.env.STRIPE_PAY);
+const jwt = require("jsonwebtoken");
+
 // middleware
 app.use(express.json());
 app.use(cors());
@@ -380,7 +377,6 @@ async function run() {
       const price = data?.price;
       console.log(price);
       const amount = Number(price) * 100;
-
       const paymentIntent = await stripe.paymentIntents.create({
         currency: "usd",
         amount: amount,
